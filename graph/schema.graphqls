@@ -1,0 +1,284 @@
+"""
+Snapshot of an entire *cluster* at a specific instant.
+Returned by nodeStateRange / nodeStateAtTimestamp.
+"""
+type TimedNodeSnapshots {
+  timestamp: Time!
+  nodes: [NodeSnapshot!]!
+}
+
+"""
+Point‑in‑time view of a single Node.
+"""
+type NodeSnapshot {
+  id: ID!
+  timestamp: Time!
+  name: String!
+  roles: [String!]
+  providerID: String
+  info: NodeInfo!
+  state: NodeState!
+  pods: [PodSnapshot!]!
+}
+
+"""
+Point‑in‑time view of a single Pod.
+"""
+type PodSnapshot {
+  id: ID!
+  nodeID: ID!
+  timestamp: Time!
+  name: String!
+  namespace: String
+  status: PodPhase!
+  initContainers: [ContainerSnapshot!]
+  containers: [ContainerSnapshot!]!
+  ephemeralContainers: [ContainerSnapshot!]
+  startedAt: Time!
+  deletedAt: Time
+  finishedAt: Time
+  deletedBy: String
+  qosClass: PodQOSClass!
+}
+
+"""
+Point‑in‑time view of a container inside a Pod.
+"""
+type ContainerSnapshot {
+  containerID: String!
+  name: String!
+  image: String!
+  imageID: String!
+  resources: ContainerResources
+  ready: Boolean!
+  restartCount: Int64
+  startedAt: Time!
+  running: Boolean!
+  state: ContainerState!
+  lastState: ContainerLastState
+}
+
+type ContainerState {
+  exitCode: Int64
+  startedAt: Time!
+  finishedAt: Time
+  reason: String
+}
+
+type ContainerLastState {
+  exitCode: Int64
+  startedAt: Time
+  finishedAt: Time
+  reason: String
+}
+
+type ContainerResources {
+  requests: ContainerResource
+  limits: ContainerResource
+}
+
+type ContainerResource {
+  cpu: String
+  memory: String
+  ephemeralStorage: String
+}
+
+
+# ────────────────────────────────────────────────────────
+#  Supporting types
+# ────────────────────────────────────────────────────────
+
+"""
+CPU and memory capacity/allocatable for a node.
+"""
+type NodeCapacity {
+  cpu: String!
+  memory: String!
+  ephemeralStorage: String!
+  pods: Int64
+}
+
+"""
+Condensed status block for a Node.
+"""
+type NodeState {
+  status: NodeCondition!   # Ready / NotReady / Unknown
+  capacity: NodeCapacity!
+  allocatable: NodeCapacity!
+  taints: [NodeTaint!]!
+  unschedulable: Boolean
+}
+
+type NodeInfo {
+  architecture: String!
+  containerRuntimeVersion: String!
+  kernelVersion: String!
+  kubeletVersion: String!
+  kubeProxyVersion: String!
+  osImage: String!
+  operatingSystem: String
+  machineId: String!
+  systemUUID: String!
+  bootID: String!
+}
+
+type NodeTaint {
+  key: String!
+  value: String
+  effect: String!
+  timeAdded: Time
+}
+
+input NodeSnapshotInput {
+  id: ID!
+  timestamp: Time!
+  name: String!
+  roles: [String!]
+  providerID: String
+  info: NodeInfoInput!
+  state: NodeStateInput!
+  pods: [PodSnapshotInput!]!
+}
+
+input NodeInfoInput {
+  architecture: String!
+  containerRuntimeVersion: String!
+  kernelVersion: String!
+  kubeletVersion: String!
+  kubeProxyVersion: String!
+  osImage: String!
+  operatingSystem: String
+  machineId: String!
+  systemUUID: String!
+  bootID: String!
+}
+
+input NodeStateInput {
+  status: NodeCondition!   # Ready / NotReady / Unknown
+  timestamp: Time!
+  capacity: NodeCapacityInput!
+  allocatable: NodeCapacityInput!
+  taints: [NodeTaintInput!]!
+  unschedulable: Boolean
+}
+
+input NodeCapacityInput {
+  cpu: String!
+  memory: String!
+  ephemeralStorage: String!
+  pods: Int64
+}
+
+input NodeTaintInput {
+  key: String!
+  value: String
+  effect: String!
+  timeAdded: Time
+}
+
+input PodSnapshotInput {
+  id: ID!
+  nodeID: ID!
+  timestamp: Time!
+  name: String!
+  namespace: String
+  status: PodPhase!
+  initContainers: [ContainerSnapshotInput!]
+  containers: [ContainerSnapshotInput!]!
+  ephemeralContainers: [ContainerSnapshotInput!]
+  startedAt: Time!
+  deletedAt: Time
+  finishedAt: Time
+  deletedBy: String
+  qosClass: PodQOSClass!
+}
+
+input ContainerSnapshotInput {
+  containerID: String!
+  name: String!
+  image: String!
+  imageID: String!
+  resources: ContainerResourcesInput
+  ready: Boolean!
+  restartCount: Int64
+  startedAt: Time!
+  running: Boolean!
+  state: ContainerStateInput!
+  lastState: ContainerStateInput
+}
+
+input ContainerResourcesInput {
+  requests: ContainerResourceInput
+  limits: ContainerResourceInput
+}
+
+input ContainerResourceInput {
+  cpu: String
+  memory: String
+  ephemeralStorage: String
+}
+
+input ContainerStateInput {
+  exitCode: Int64
+  startedAt: Time!
+  finishedAt: Time
+  reason: String
+}
+
+# ─────────────────────────────────────────────────────────
+#  Enums
+# ─────────────────────────────────────────────────────────
+
+enum NodeCondition {
+  Ready
+  NotReady
+  Unknown
+}
+
+enum PodPhase {
+  Pending
+  Running
+  Succeeded
+  Failed
+  Unknown
+}
+
+enum PodQOSClass {
+  Burstable
+  Guaranteed
+  BestEffort
+  Unknown
+}
+
+scalar Time
+scalar Int64
+
+# ─────────────────────────────────────────────────────────
+#  Root‑level operations
+# ─────────────────────────────────────────────────────────
+
+type Query {
+  """
+  Single snapshot of nodes at an exact timestamp (ISO‑8601 UTC).
+  """
+  nodeStatesAtTimestamp(timestamp: Time!): TimedNodeSnapshots!
+
+  """
+  Range query: snapshots from *start* to *end* every *step* seconds.
+  `step` must be >= 1 and is capped by the server to avoid huge payloads.
+  """
+  nodeStatesRange(
+    start: Time!
+    end: Time!
+    step: Int64!             	# seconds
+  ): [TimedNodeSnapshots!]!
+}
+
+type Mutation {
+  recordNodeAtTimestamp(input: NodeSnapshotInput!): ID!
+}
+
+
+
+
+
